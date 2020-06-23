@@ -1,0 +1,101 @@
+#!/usr/bin/env lua
+
+local RANK = 1
+local QUESTION = 2
+local ANSWER = 3
+
+local function query (msg, menu)
+	if msg then
+		io.write(msg)
+	end
+
+	io.write("[y/n]")
+
+	repeat
+		ans = io.read()
+	until ans == "y" or ans == "n" or ans == " "
+
+	return ans == "y" or ans == " "
+end
+
+local function ask (card)
+	io.write("\n\n")
+
+	io.write("\n")
+	print(card[QUESTION])
+
+	io.read(1) -- user presses "Enter" to continue
+
+	print(card[ANSWER])
+
+	io.write("\n")
+	return query("Did you get this one?")
+end
+
+-- Usage: ./flashcards forth
+if not arg[1] then
+	print("Missing arg")
+	os.exit()
+end
+
+local filename = string.format("cards/%s.lua", arg[1])
+dofile(filename) -- loads the 'data' table
+
+-- Run the question-answer session
+local function run_session (num_questions)
+	num_questions = num_questions or math.huge
+
+	local cache = {} -- cache rank-results before committing in case user quits mid-session
+
+	for i, card in ipairs(data) do
+		if data.day % math.tointeger(2^card[RANK]) == 0 then
+			if ask(card) then
+				cache[i] = math.min(card[RANK] + 1, 4) -- 4 is the max-rank
+			else
+				cache[i] = 0
+			end
+		end
+
+		if i == num_questions then break end
+	end
+
+	print("Session has ended; results will be committed back to database (Ctrl+c to abort).")
+	io.read(1)
+
+	-- Commit the new card ranks back to the data table
+	for index in pairs(cache) do
+		data[index][RANK] = cache[index]
+	end
+
+	-- Prepare for the next session
+	data.day = data.day + 1
+
+	return data
+end
+
+local data = run_session()
+
+-- Write everything back to the given file
+local buffer = {
+string.format([[
+data={
+	day=%s,]], data.day)
+}
+
+for _, card in ipairs(data) do
+	buffer[#buffer + 1] =
+string.format([[
+	{
+		%d,
+		%q,
+		%q
+	},]], card[RANK], card[QUESTION], card[ANSWER])
+end
+
+buffer[#buffer + 1] = "}"
+buffer[#buffer + 1] = ""
+local result = table.concat(buffer, "\n")
+
+local file = io.open(filename, "w")
+file:write(result)
+file:close()
