@@ -1,8 +1,17 @@
 #!/usr/bin/env lua
 
-local RANK = 1
-local QUESTION = 2
-local ANSWER = 3
+-- Has to be global, to be visible inside data-files.
+function Card (t)
+	return setmetatable(t, {__index = function (t, key)
+		if key == "rank" then
+			return t[1]
+		elseif key == "question" then
+			return t[2]
+		elseif key == "answer" then
+			return t[3]
+		end
+	end})
+end
 
 local function query (msg, menu)
 	if msg then
@@ -22,35 +31,35 @@ local function ask (card)
 	io.write("\n\n")
 
 	io.write("\n")
-	print(card[QUESTION])
+	print(card.question)
 
 	io.read(1) -- user presses "Enter" to continue
 
-	print(card[ANSWER])
+	print(card.answer)
 
 	io.write("\n")
 	return query("Did you get this one?")
 end
 
--- Usage: ./flashcards forth
+-- Usage: ./flashcards forth [#questions]
 if not arg[1] then
-	print("Missing arg")
+	print("Missing subject")
 	os.exit()
 end
+
+local num_questions = arg[2] and tonumber(arg[2]) or math.huge
 
 local filename = string.format("cards/%s.lua", arg[1])
 dofile(filename) -- loads the 'data' table
 
 -- Run the question-answer session
 local function run_session (num_questions)
-	num_questions = num_questions or math.huge
-
 	local cache = {} -- cache rank-results before committing in case user quits mid-session
 
 	for i, card in ipairs(data) do
-		if data.day % math.tointeger(2^card[RANK]) == 0 then
+		if data.day % math.tointeger(2^card.rank) == 0 then
 			if ask(card) then
-				cache[i] = math.min(card[RANK] + 1, 4) -- 4 is the max-rank
+				cache[i] = math.min(card.rank + 1, 4) -- 4 is the max-rank
 			else
 				cache[i] = 0
 			end
@@ -64,7 +73,7 @@ local function run_session (num_questions)
 
 	-- Commit the new card ranks back to the data table
 	for index in pairs(cache) do
-		data[index][RANK] = cache[index]
+		data[index].rank = cache[index]
 	end
 
 	-- Prepare for the next session
@@ -73,7 +82,7 @@ local function run_session (num_questions)
 	return data
 end
 
-local data = run_session()
+local data = run_session(num_questions)
 
 -- Write everything back to the given file
 local buffer = {
@@ -85,11 +94,11 @@ data={
 for _, card in ipairs(data) do
 	buffer[#buffer + 1] =
 string.format([[
-	{
+	Card{
 		%d,
 		%q,
 		%q
-	},]], card[RANK], card[QUESTION], card[ANSWER])
+	},]], card.rank, card.question, card.answer)
 end
 
 buffer[#buffer + 1] = "}"
